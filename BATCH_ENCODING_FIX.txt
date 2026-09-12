@@ -1,0 +1,1 @@
+v0.2.1: All .bat files are ASCII-only with CRLF line endings to avoid cmd.exe mojibake/parsing errors.
