@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import configparser
+import math
 import sys
 import re
 import unicodedata
@@ -138,10 +139,11 @@ def load_settings(*, require_youtube_key: bool = True) -> Settings:
     delay_seconds = parser.getfloat("Pavlok", "delay_seconds", fallback=0.0)
     cooldown_seconds = parser.getfloat("Pavlok", "cooldown_seconds", fallback=0.0)
 
-    if delay_seconds < 0:
-        raise ValueError("delay_seconds は0以上にしてください。")
-    if cooldown_seconds < 0:
-        raise ValueError("cooldown_seconds は0以上にしてください。")
+    # getfloatはnan/infも受け入れる。予約の無限待機やcooldownの無効化を防ぐ。
+    if not math.isfinite(delay_seconds) or delay_seconds < 0:
+        raise ValueError("delay_seconds は0以上の有限の数値にしてください。")
+    if not math.isfinite(cooldown_seconds) or cooldown_seconds < 0:
+        raise ValueError("cooldown_seconds は0以上の有限の数値にしてください。")
 
     output_mode = parser.get("Pavlok", "output_mode", fallback="fixed").strip().lower()
     if output_mode not in {"fixed", "random"}:
