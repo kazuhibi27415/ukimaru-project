@@ -15,8 +15,8 @@ if not exist ".venv\Scripts\python.exe" (
     exit /b 1
 )
 
-if not exist "config.ini" (
-    echo [ERROR] config.ini was not found.
+if not exist "config.defaults.ini" (
+    echo [ERROR] config.defaults.ini was not found.
     pause
     exit /b 1
 )
@@ -48,8 +48,6 @@ if not exist "dist\PavlokSuperChat.exe" (
 
 echo.
 echo [4/4] Copying user files...
-copy /Y "config.ini" "dist\config.ini" >nul
-if errorlevel 1 goto BUILD_ERROR
 copy /Y "README.txt" "dist\README.txt" >nul
 if errorlevel 1 goto BUILD_ERROR
 
@@ -59,7 +57,6 @@ echo  BUILD OK
 echo ====================================================
 echo Output:
 echo   %CD%\dist\PavlokSuperChat.exe
-echo   %CD%\dist\config.ini
 echo   %CD%\dist\README.txt
 echo.
 echo The target PC does not need Python installed.

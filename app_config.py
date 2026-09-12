@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import configparser
 import math
+import os
 import sys
 import re
 import unicodedata
@@ -53,7 +54,26 @@ def get_app_dir() -> Path:
 
 
 def get_config_path() -> Path:
+    if getattr(sys, "frozen", False):
+        local = Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local"))
+        return local / "PavlokSuperChat" / "config.ini"
     return get_app_dir() / "config.ini"
+
+
+def ensure_config_exists() -> Path:
+    """EXEの初回だけ同梱初期設定を利用者フォルダへコピーする。既存設定は優先する。"""
+    path = get_config_path()
+    if getattr(sys, "frozen", False) and not path.exists():
+        default = Path(sys._MEIPASS) / "config.defaults.ini"
+        data = default.read_bytes()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            # GUIと監視子プロセスが同時に起動しても既存設定を上書きしない。
+            with path.open("xb") as handle:
+                handle.write(data)
+        except FileExistsError:
+            pass
+    return path
 
 
 def _normalize_bearer_token(value: str) -> str:
@@ -141,7 +161,7 @@ def _load_output_groups(parser: configparser.ConfigParser) -> tuple[OutputGroup,
 
 
 def load_settings(*, require_youtube_key: bool = True) -> Settings:
-    config_path = get_config_path()
+    config_path = ensure_config_exists()
 
     if not config_path.exists():
         raise FileNotFoundError(

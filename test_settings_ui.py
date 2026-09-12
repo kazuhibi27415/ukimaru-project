@@ -5,9 +5,10 @@ import tempfile
 import tkinter as tk
 import unittest
 import sys
+import os
 from unittest.mock import MagicMock, patch
 
-from app_config import settings_from_parser
+from app_config import settings_from_parser, ensure_config_exists
 from settings_ui import MonitorProcess, SettingsWindow, save_config
 from pavlok_superchat import configure_stdio
 
@@ -19,6 +20,23 @@ def example():
 
 
 class SettingsUiTests(unittest.TestCase):
+    def test_frozen_first_start_and_existing_settings(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as directory:
+            base = Path(directory)
+            bundle = base / 'bundle'
+            bundle.mkdir()
+            default = Path('config.defaults.ini').read_bytes()
+            (bundle / 'config.defaults.ini').write_bytes(default)
+            with patch.object(sys, 'frozen', True, create=True), \
+                    patch.object(sys, '_MEIPASS', str(bundle), create=True), \
+                    patch.dict(os.environ, {'LOCALAPPDATA': str(base / 'profile')}):
+                path = ensure_config_exists()
+                self.assertEqual(path, base / 'profile' / 'PavlokSuperChat' / 'config.ini')
+                self.assertEqual(path.read_bytes(), default)
+                path.write_bytes(b'; existing user settings\r\n')
+                self.assertEqual(ensure_config_exists(), path)
+                self.assertEqual(path.read_bytes(), b'; existing user settings\r\n')
+
     def test_gui_worker_overrides_cp932_streams(self):
         streams = [io.TextIOWrapper(io.BytesIO(), encoding='cp932') for _ in range(3)]
         try:
@@ -97,7 +115,7 @@ class SettingsUiTests(unittest.TestCase):
         root = tk.Tk()
         root.withdraw()
         try:
-            with patch('settings_ui.get_config_path', return_value=Path('config.ini.example')):
+            with patch('settings_ui.ensure_config_exists', return_value=Path('config.ini.example')):
                 window = SettingsWindow(root)
             self.assertEqual(len([key for key in window.fields if key[1] == 'output_mode']), 4)
             self.assertEqual(window.fields['SuperChat1', 'output_mode'].get(), '固定')

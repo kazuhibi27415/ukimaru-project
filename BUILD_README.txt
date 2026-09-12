@@ -2,11 +2,16 @@
 ======================================
 
 これは開発・ビルド用パッケージです。
-配布先の利用者には、distフォルダ内の次の3ファイルだけ渡せばOKです。
+配布先の利用者には、distフォルダ内のEXEを渡せば動作します。
 
   PavlokSuperChat.exe
-  config.ini
-  README.txt
+  README.txt（任意の説明書）
+
+config.defaults.iniを初期設定としてEXEに同梱します。
+このファイルには利用者のAPIキー・トークンを記載しないでください。
+利用者設定は初回起動時に%LOCALAPPDATA%\PavlokSuperChat\config.iniへ作成します。
+既存の利用者設定はEXEの更新時にも上書きしません。
+ソース実行用config.iniやdist横のconfig.iniはEXEへ同梱しません。
 
 
 1. Pythonを用意

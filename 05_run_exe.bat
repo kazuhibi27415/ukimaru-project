@@ -10,12 +10,6 @@ if not exist "dist\PavlokSuperChat.exe" (
     exit /b 1
 )
 
-if not exist "dist\config.ini" (
-    echo [ERROR] dist\config.ini was not found.
-    pause
-    exit /b 1
-)
-
 cd /d "%~dp0dist"
 PavlokSuperChat.exe
 set RC=%errorlevel%

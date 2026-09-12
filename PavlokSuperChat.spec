@@ -1,6 +1,16 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 from PyInstaller.utils.hooks import collect_submodules
+import configparser
+from pathlib import Path
+
+# 利用者の認証情報を誤って配布用EXEへ同梱しない。
+defaults = configparser.ConfigParser(interpolation=None)
+defaults.read(Path(SPECPATH) / "config.defaults.ini", encoding="utf-8-sig")
+for section, key in (("YouTube", "api_key"), ("Pavlok", "initial_token")):
+    value = defaults.get(section, key, fallback="").strip()
+    if value and not value.upper().startswith(("PASTE_", "YOUR_")):
+        raise ValueError(f"config.defaults.ini の [{section}] {key} は空欄またはプレースホルダーにしてください。")
 
 hiddenimports = (
     collect_submodules("grpc")
@@ -11,7 +21,7 @@ a = Analysis(
     ["pavlok_superchat.py"],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[("config.defaults.ini", ".")],
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},

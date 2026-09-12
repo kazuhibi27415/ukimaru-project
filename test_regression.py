@@ -181,7 +181,8 @@ class RegressionTests(unittest.TestCase):
         self.assertEqual(app_config._normalize_bearer_token('Bearer\u3000test-token'), 'test-token')
         with patch.object(app_config.sys, 'frozen', True, create=True), \
                 patch.object(app_config.sys, 'executable', str(Path.cwd() / 'app' / 'PavlokSuperChat.exe')):
-            self.assertEqual(app_config.get_config_path(), Path.cwd() / 'app' / 'config.ini')
+            with patch.dict(app_config.os.environ, {'LOCALAPPDATA': str(Path.cwd() / 'local-profile')}):
+                self.assertEqual(app_config.get_config_path(), Path.cwd() / 'local-profile' / 'PavlokSuperChat' / 'config.ini')
 
     def test_fifo_delay_cooldown_and_random_selection(self):
         config = replace(settings(), pavlok_enabled=True, delay_seconds=0.03,

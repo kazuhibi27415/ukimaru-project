@@ -14,7 +14,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
-from app_config import get_config_path, settings_from_parser
+from app_config import ensure_config_exists, settings_from_parser
 from youtube_stream import extract_video_id
 
 OUTPUT_LABELS = {"fixed": "固定", "random": "ランダム"}
@@ -125,7 +125,7 @@ class SettingsWindow:
         self.secrets = []
         self.fields = {}
         self.controls = []
-        self.path = get_config_path()
+        self.path = ensure_config_exists()
         self.parser = configparser.ConfigParser(interpolation=None)
         if self.path.exists():
             self.parser.read(self.path, encoding="utf-8-sig")
@@ -137,6 +137,7 @@ class SettingsWindow:
         frame.pack(fill="both", expand=True)
         ttk.Label(frame, text="PavlokSuperChat", font=("Yu Gothic UI", 18, "bold")).pack(anchor="w")
         ttk.Label(frame, text="日本円のSuper Chatを金額完全一致で検出します。設定は開始前に保存されます。").pack(anchor="w")
+        ttk.Label(frame, text=f"設定の保存先: {self.path}", foreground="#666666").pack(anchor="w")
         general = ttk.LabelFrame(frame, text="認証と共通設定", padding=10)
         general.pack(fill="x", pady=8)
         general.columnconfigure(1, weight=1)

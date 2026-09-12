@@ -2,8 +2,21 @@
 
 - 対象バージョン: **v0.3.0**
 - 対象OS: **Windows 10 / 11 64-bit**
-- 配布形態: **PyInstallerで生成した単体EXE + 外部 `config.ini` + `README.txt`**
+- 配布形態: **PyInstaller単体EXE（初期設定同梱）＋任意のREADME.txt**
 - UI: **設定・開始停止GUI（通常起動）／従来コンソール（--console）**
+
+## 追加仕様: EXE単体配布と利用者別設定（2026-09-13）
+
+ユーザーの明示依頼により、本文の「EXE横に外部config.ini」制約を更新する。
+- config.defaults.iniをEXEへ同梱する。初期値は今回のdebug-dist/config.iniをコピーしたもの。
+- APIキー・トークンの実値は同梱しない。ビルド時も検証する。実送信ONは配布用設定の値を維持する。
+- EXEの初回起動で%LOCALAPPDATA%/PavlokSuperChat/config.iniを作成する。
+- 保存済み利用者設定は上書きしない。GUIと監視子プロセスは同じ利用者設定を参照する。
+- EXE横のconfig.iniは読み込まない。旧設定は利用者が停止中に保存先へコピーして移行する。
+- ソース実行時は従来どおりプロジェクト直下のconfig.iniを使用する。
+- 配布はEXEだけで動作する。README.txtは任意の説明書。
+- GUIの出力方法は「固定」「ランダム」。保存する値はfixed/randomを維持する。
+- EXEはconsole=False。GUIの監視用パイプはUTF-8で明示的に開き、日本語・円記号を維持する。
 
 ## 追加仕様: 設定画面と監視開始・停止（2026-09-13）
 
