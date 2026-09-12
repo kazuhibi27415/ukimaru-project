@@ -34,6 +34,7 @@ def main() -> None:
         cooldown_seconds=0.7,
         output_mode="fixed",
         fixed_output=1,
+        output_groups=(),
     )
 
     worker = TriggerWorker(settings, None)

@@ -20,13 +20,15 @@ from test_queue import event
 from trigger_worker import TriggerWorker
 
 
-def settings(**values):
+def settings(*, groups=None, **values):
     parser = configparser.ConfigParser()
     parser.read_dict({
         'YouTube': {'api_key': 'test-key'},
         'SuperChat': {'amounts': '500,1000'},
         'Pavlok': {'enabled': 'false', **{k: str(v) for k, v in values.items()}},
     })
+    if groups is not None:
+        parser.read_dict(groups)
     with patch.object(app_config, 'get_config_path', return_value=MagicMock()), \
             patch.object(app_config.configparser, 'ConfigParser', return_value=parser), \
             patch.object(parser, 'read', return_value=['mock.ini']):
@@ -34,6 +36,84 @@ def settings(**values):
 
 
 class RegressionTests(unittest.TestCase):
+    def test_four_output_groups(self):
+        groups = {f'SuperChat{i}': {'amounts': str(i * 500), 'output_mode': 'fixed',
+                                   'fixed_output': str(i * 10)} for i in range(1, 5)}
+        groups['SuperChat4'] = {'amounts': '2000,3000', 'output_mode': 'random',
+                               'random_min': '35', 'random_max': '45'}
+        config = settings(groups=groups)
+        self.assertEqual(config.trigger_amounts, frozenset((500, 1000, 1500, 2000, 3000)))
+        self.assertEqual(config.group_for_amount(3000).name, 'SuperChat4')
+        client = MagicMock()
+        complete = threading.Event()
+        outputs = []
+
+        def send(output):
+            outputs.append(output)
+            if len(outputs) == 4:
+                complete.set()
+            return ZapResult(True, 200, 'OK')
+
+        client.send_zap.side_effect = send
+        with patch('trigger_worker.random.randint', return_value=42) as choose:
+            worker = TriggerWorker(replace(config, pavlok_enabled=True), client)
+            try:
+                for number, amount in enumerate((1500, 500, 3000, 1000)):
+                    worker.enqueue(event(number, amount))
+                self.assertTrue(complete.wait(3))
+                self.assertEqual(outputs, [30, 10, 42, 20])
+                choose.assert_called_once_with(35, 45)
+            finally:
+                worker.stop()
+                worker.thread.join(1)
+
+    def test_invalid_groups(self):
+        base = {f'SuperChat{i}': {'amounts': str(i * 500), 'output_mode': 'fixed',
+                                 'fixed_output': '20'} for i in range(1, 5)}
+        for change in ({'amounts': '500'}, {'amounts': ''}, {'amounts': '-1'},
+                       {'amounts': '500.5'}, {'fixed_output': '101'},
+                       {'output_mode': 'invalid'},
+                       {'output_mode': 'random', 'random_min': '40', 'random_max': '20'}):
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                settings(groups={**base, 'SuperChat2': {**base['SuperChat2'], **change}})
+        with self.assertRaises(ValueError):
+            settings(groups={'SuperChat1': base['SuperChat1']})
+        with self.assertRaises(ValueError):
+            settings(groups={**base, 'SuperChat2': {'amounts': '1000', 'output_mode': 'fixed'}})
+
+    def test_disabled_groups_and_ignored_legacy_output(self):
+        groups = {
+            'SuperChat1': {'amounts': '500', 'output_mode': 'fixed', 'fixed_output': '25'},
+            'SuperChat2': {'amounts': '1000', 'output_mode': 'random', 'random_min': '10', 'random_max': '30'},
+            'SuperChat3': {'enabled': 'false'},
+            'SuperChat4': {'enabled': 'false', 'amounts': '500', 'fixed_output': 'invalid'},
+        }
+        config = settings(groups=groups, output_mode='invalid', fixed_output='invalid',
+                          random_min='invalid', random_max='invalid')
+        self.assertEqual(config.trigger_amounts, frozenset((500, 1000)))
+        self.assertEqual(len(config.output_groups), 2)
+        self.assertIsNone(config.group_for_amount(3000))
+        for group in groups.values():
+            group['enabled'] = 'false'
+        with self.assertRaisesRegex(ValueError, 'enabled=true'):
+            settings(groups=groups)
+
+    def test_every_group_supports_both_modes(self):
+        for mode in ('fixed', 'random'):
+            groups = {f'SuperChat{i}': {'enabled': 'true', 'amounts': str(i * 500),
+                       'output_mode': mode, 'fixed_output': '23',
+                       'random_min': '10', 'random_max': '30'} for i in range(1, 5)}
+            config = settings(groups=groups)
+            worker = TriggerWorker(config, None)
+            try:
+                with patch('trigger_worker.random.randint', return_value=17) as choose:
+                    for group in config.output_groups:
+                        self.assertEqual(worker._select_output(group), 23 if mode == 'fixed' else 17)
+                    self.assertEqual(choose.call_count, 0 if mode == 'fixed' else 4)
+            finally:
+                worker.stop()
+                worker.thread.join(1)
+
     def test_invalid_waits_rejected(self):
         for key in ('delay_seconds', 'cooldown_seconds'):
             for value in ('nan', 'NaN', 'inf', '+inf', '-inf', 'Infinity', '-1'):

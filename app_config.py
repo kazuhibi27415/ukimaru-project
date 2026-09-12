@@ -14,6 +14,16 @@ PAVLOK_MAX_OUTPUT = 100
 
 
 @dataclass(frozen=True)
+class OutputGroup:
+    name: str
+    amounts: frozenset[int]
+    output_mode: str
+    fixed_output: int
+    random_min: int
+    random_max: int
+
+
+@dataclass(frozen=True)
 class Settings:
     youtube_api_key: str
     trigger_amounts: frozenset[int]
@@ -29,6 +39,10 @@ class Settings:
     random_max: int
 
     ignore_initial_history: bool
+    output_groups: tuple[OutputGroup, ...] = ()
+
+    def group_for_amount(self, amount: int) -> OutputGroup | None:
+        return next((group for group in self.output_groups if amount in group.amounts), None)
 
 
 def get_app_dir() -> Path:
@@ -87,6 +101,45 @@ def _looks_like_placeholder(value: str) -> bool:
     return not value or "PASTE_" in upper or "YOUR_" in upper or "ここに" in value
 
 
+def _load_output_groups(parser: configparser.ConfigParser) -> tuple[OutputGroup, ...]:
+    names = [f"SuperChat{i}" for i in range(1, 5)]
+    if not any(parser.has_section(name) for name in names):
+        return ()
+    groups = []
+    used = set()
+    for name in names:
+        if not parser.has_section(name):
+            raise ValueError(f"4グループ設定には [{name}] が必要です。")
+        try:
+            # 無効グループは金額・出力の検証や重複判定にも参加しない。
+            if not parser.getboolean(name, "enabled", fallback=True):
+                continue
+            amounts = frozenset(int(x.strip()) for x in parser.get(name, "amounts").split(",") if x.strip())
+            mode = parser.get(name, "output_mode").strip().lower()
+            fixed = parser.getint(name, "fixed_output", fallback=20)
+            low = parser.getint(name, "random_min", fallback=20)
+            high = parser.getint(name, "random_max", fallback=20)
+            # 使用する出力値は明示必須。入力漏れで意図しない強さを送らない。
+            required = ("fixed_output",) if mode == "fixed" else ("random_min", "random_max")
+            if any(not parser.has_option(name, key) for key in required):
+                raise ValueError("使用する出力値を指定してください。")
+        except (ValueError, configparser.Error) as exc:
+            raise ValueError(f"[{name}] 設定が不正です: {exc}") from exc
+        if not amounts or any(amount <= 0 for amount in amounts):
+            raise ValueError(f"[{name}] amounts は1以上の整数を指定してください。")
+        if used.intersection(amounts):
+            raise ValueError(f"[{name}] amounts が他グループと重複しています。")
+        if mode not in {"fixed", "random"}:
+            raise ValueError(f"[{name}] output_mode は fixed または random を指定してください。")
+        if any(not 1 <= value <= 100 for value in (fixed, low, high)) or low > high:
+            raise ValueError(f"[{name}] 出力は1～100、random_min <= random_max にしてください。")
+        used.update(amounts)
+        groups.append(OutputGroup(name, amounts, mode, fixed, low, high))
+    if not groups:
+        raise ValueError("少なくとも1つのSuperChatグループをenabled=trueにしてください。")
+    return tuple(groups)
+
+
 def load_settings(*, require_youtube_key: bool = True) -> Settings:
     config_path = get_config_path()
 
@@ -109,7 +162,11 @@ def load_settings(*, require_youtube_key: bool = True) -> Settings:
             "[YouTube] api_key が未設定です。config.ini を編集してください。"
         )
 
-    raw_amounts = parser.get("SuperChat", "amounts", fallback="")
+    output_groups = _load_output_groups(parser)
+    raw_amounts = (
+        ",".join(str(amount) for group in output_groups for amount in group.amounts)
+        if output_groups else parser.get("SuperChat", "amounts", fallback="")
+    )
     try:
         trigger_amounts = frozenset(
             int(x.strip())
@@ -145,13 +202,14 @@ def load_settings(*, require_youtube_key: bool = True) -> Settings:
     if not math.isfinite(cooldown_seconds) or cooldown_seconds < 0:
         raise ValueError("cooldown_seconds は0以上の有限の数値にしてください。")
 
-    output_mode = parser.get("Pavlok", "output_mode", fallback="fixed").strip().lower()
+    # グループ方式では旧共通出力を参照しない（不正な旧値も影響させない）。
+    output_mode = "fixed" if output_groups else parser.get("Pavlok", "output_mode", fallback="fixed").strip().lower()
     if output_mode not in {"fixed", "random"}:
         raise ValueError("output_mode は fixed または random を指定してください。")
 
-    fixed_output = parser.getint("Pavlok", "fixed_output", fallback=20)
-    random_min = parser.getint("Pavlok", "random_min", fallback=20)
-    random_max = parser.getint("Pavlok", "random_max", fallback=20)
+    fixed_output = 20 if output_groups else parser.getint("Pavlok", "fixed_output", fallback=20)
+    random_min = 20 if output_groups else parser.getint("Pavlok", "random_min", fallback=20)
+    random_max = 20 if output_groups else parser.getint("Pavlok", "random_max", fallback=20)
 
     for label, value in (
         ("fixed_output", fixed_output),
@@ -180,6 +238,7 @@ def load_settings(*, require_youtube_key: bool = True) -> Settings:
         random_min=random_min,
         random_max=random_max,
         ignore_initial_history=ignore_initial_history,
+        output_groups=output_groups,
     )
 
 

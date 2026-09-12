@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass
 from decimal import Decimal
 
-from app_config import Settings
+from app_config import OutputGroup, Settings
 from pavlok_api import PavlokClient
 from youtube_stream import SuperChatEvent
 
@@ -25,6 +25,7 @@ class TriggerJob:
     amount: Decimal
     amount_display: str
     ready_at: float
+    output_group: OutputGroup | None = None
 
 
 class TriggerWorker:
@@ -46,6 +47,9 @@ class TriggerWorker:
         self.thread.start()
 
     def enqueue(self, event: SuperChatEvent) -> None:
+        group = self.settings.group_for_amount(event.amount)
+        if self.settings.output_groups and group is None:
+            raise ValueError("対象金額に対応する出力グループがありません。")
         number = next(self.counter)
         job = TriggerJob(
             number=number,
@@ -54,6 +58,7 @@ class TriggerWorker:
             amount=event.amount,
             amount_display=event.amount_display,
             ready_at=time.monotonic() + self.settings.delay_seconds,
+            output_group=group,
         )
         self.jobs.put(job)
         LOGGER.info(
@@ -68,10 +73,11 @@ class TriggerWorker:
         # 未実行キューは永続化しない。終了時に破棄する。
         self.stop_event.set()
 
-    def _select_output(self) -> int:
-        if self.settings.output_mode == "fixed":
-            return self.settings.fixed_output
-        return random.randint(self.settings.random_min, self.settings.random_max)
+    def _select_output(self, group: OutputGroup | None = None) -> int:
+        profile = group or self.settings
+        if profile.output_mode == "fixed":
+            return profile.fixed_output
+        return random.randint(profile.random_min, profile.random_max)
 
     def _wait_until(self, target: float) -> bool:
         while not self.stop_event.is_set():
@@ -104,13 +110,16 @@ class TriggerWorker:
                         if not self._wait_until(next_allowed):
                             return
 
-                output = self._select_output()
-                if self.settings.output_mode == "random":
+                profile = job.output_group or self.settings
+                if job.output_group:
+                    LOGGER.info("[GROUP] #%d %s", job.number, job.output_group.name)
+                output = self._select_output(job.output_group)
+                if profile.output_mode == "random":
                     LOGGER.info(
                         "[OUTPUT] #%d random %d-%d => %d",
                         job.number,
-                        self.settings.random_min,
-                        self.settings.random_max,
+                        profile.random_min,
+                        profile.random_max,
                         output,
                     )
                 else:

@@ -43,7 +43,13 @@ def main() -> int:
     print(f"Pavlok: {'ON (実送信)' if settings.pavlok_enabled else 'OFF (DRY-RUN)'}")
     print(f"Delay: {settings.delay_seconds:g}s")
     print(f"Cooldown: {settings.cooldown_seconds:g}s")
-    if settings.output_mode == "fixed":
+    if settings.output_groups:
+        for group in settings.output_groups:
+            amounts = ", ".join(f"¥{amount:,}" for amount in sorted(group.amounts))
+            output = (f"fixed {group.fixed_output}" if group.output_mode == "fixed"
+                      else f"random {group.random_min}-{group.random_max}")
+            print(f"{group.name}: {amounts} -> {output}")
+    elif settings.output_mode == "fixed":
         print(f"Output: fixed {settings.fixed_output}")
     else:
         print(f"Output: random {settings.random_min}-{settings.random_max}")
