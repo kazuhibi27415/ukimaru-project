@@ -5,6 +5,7 @@ import sys
 from decimal import Decimal
 
 from app_config import load_settings
+from app_version import VERSION
 from pavlok_api import PavlokAuth, PavlokClient
 from trigger_worker import TriggerWorker
 from youtube_stream import SuperChatEvent, extract_video_id, get_live_chat_id, watch_live_chat
@@ -62,7 +63,7 @@ def main() -> int:
 
     print()
     print("====================================================")
-    print(" YouTube SuperChat -> Pavlok Controller  v0.3.0")
+    print(f" YouTube SuperChat -> Pavlok Controller  v{VERSION}")
     print("====================================================")
     print()
 

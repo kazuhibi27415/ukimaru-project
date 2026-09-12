@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title PavlokSuperChat v0.2.1
+title PavlokSuperChat v1.0
 
 if not exist ".venv\Scripts\python.exe" (
     echo [ERROR] .venv was not found.

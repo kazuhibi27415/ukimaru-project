@@ -50,6 +50,8 @@ echo.
 echo [4/4] Copying user files...
 copy /Y "README.txt" "dist\README.txt" >nul
 if errorlevel 1 goto BUILD_ERROR
+".venv\Scripts\python.exe" -c "import shutil; shutil.copyfile('\u66f4\u65b0\u5c65\u6b74.md', 'dist/\u66f4\u65b0\u5c65\u6b74.md')"
+if errorlevel 1 goto BUILD_ERROR
 
 echo.
 echo ====================================================

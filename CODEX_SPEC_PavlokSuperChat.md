@@ -1,6 +1,6 @@
 # PavlokSuperChat — Codex 引き継ぎ仕様書
 
-- 対象バージョン: **v0.3.0**
+- 対象バージョン: **1.0**（VERSION.txtを表示の共通参照元とする）
 - 対象OS: **Windows 10 / 11 64-bit**
 - 配布形態: **PyInstaller単体EXE（初期設定同梱）＋任意のREADME.txt**
 - UI: **設定・開始停止GUI（通常起動）／従来コンソール（--console）**

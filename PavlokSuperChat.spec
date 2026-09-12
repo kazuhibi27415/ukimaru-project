@@ -21,7 +21,7 @@ a = Analysis(
     ["pavlok_superchat.py"],
     pathex=[],
     binaries=[],
-    datas=[("config.defaults.ini", ".")],
+    datas=[("config.defaults.ini", "."), ("VERSION.txt", ".")],
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},

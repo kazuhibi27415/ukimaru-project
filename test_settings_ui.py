@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 from app_config import settings_from_parser, ensure_config_exists
 from settings_ui import MonitorProcess, SettingsWindow, save_config
 from pavlok_superchat import configure_stdio
+from app_version import VERSION
 
 
 def example():
@@ -117,6 +118,7 @@ class SettingsUiTests(unittest.TestCase):
         try:
             with patch('settings_ui.ensure_config_exists', return_value=Path('config.ini.example')):
                 window = SettingsWindow(root)
+            self.assertIn(f'v{VERSION}', root.title())
             self.assertEqual(len([key for key in window.fields if key[1] == 'output_mode']), 4)
             self.assertEqual(window.fields['SuperChat1', 'output_mode'].get(), '固定')
             window.fields['SuperChat1', 'output_mode'].set('ランダム')
