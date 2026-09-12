@@ -98,6 +98,10 @@ class PavlokAuth:
             LOGGER.error("[PAVLOK AUTH] JSON以外の応答が返りました。")
             return False
 
+        if not isinstance(data, dict):
+            LOGGER.error("[PAVLOK AUTH] レスポンスがJSONオブジェクトではありません。")
+            return False
+
         user = data.get("user")
         if not isinstance(user, dict):
             LOGGER.error("[PAVLOK AUTH] レスポンスに user がありません。")
@@ -108,7 +112,14 @@ class PavlokAuth:
             LOGGER.error("[PAVLOK AUTH] レスポンスに user.token がありません。")
             return False
 
-        runtime_token = _normalize_token(runtime_token)
+        try:
+            runtime_token = _normalize_token(runtime_token)
+        except ValueError:
+            LOGGER.error("[PAVLOK AUTH] user.token の形式が不正です。")
+            return False
+        if not runtime_token:
+            LOGGER.error("[PAVLOK AUTH] 正規化後の user.token が空です。")
+            return False
 
         with self._lock:
             self._runtime_token = runtime_token
@@ -178,12 +189,14 @@ class PavlokClient:
                 headers=headers,
                 json=payload,
                 timeout=self.timeout_seconds,
+                # 307/308の転送追従も同一ZapのPOST再送になるため禁止する。
+                allow_redirects=False,
             )
         except requests.RequestException as exc:
             # タイムアウト等は「届いていない」と断定できないため再送しない。
             return ZapResult(False, None, f"通信エラー: {exc}")
 
-        if response.ok:
+        if 200 <= response.status_code < 300:
             return ZapResult(True, response.status_code, "OK")
 
         body = response.text.strip().replace("\n", " ")[:300]

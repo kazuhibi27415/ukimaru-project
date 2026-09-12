@@ -36,6 +36,49 @@ def settings(*, groups=None, **values):
 
 
 class RegressionTests(unittest.TestCase):
+    def test_zap_redirect_is_not_replayed_or_reported_successful(self):
+        for status in (301, 302, 303, 307, 308):
+            with self.subTest(status=status):
+                auth = PavlokAuth('test-initial')
+                auth._runtime_token = 'test-runtime'
+                client = PavlokClient(auth)
+                sent = []
+
+                class FakeAdapter(requests.adapters.BaseAdapter):
+                    def send(self, request, **kwargs):
+                        sent.append(request)
+                        response = requests.Response()
+                        response.status_code = status if len(sent) == 1 else 200
+                        response.headers['Location'] = '/redirected-stimulus'
+                        response._content = b''
+                        response.request = request
+                        response.url = request.url
+                        return response
+
+                    def close(self):
+                        pass
+
+                # Exercise requests' actual redirect handling without network access.
+                client.session.mount('https://', FakeAdapter())
+                try:
+                    result = client.send_zap(20)
+                    self.assertEqual(len(sent), 1)
+                    self.assertFalse(result.ok)
+                    self.assertEqual(result.status_code, status)
+                finally:
+                    client.session.close()
+
+    def test_malformed_auth_response_does_not_replace_token(self):
+        for data in (None, [], 'unexpected', {'user': None},
+                     {'user': {'token': 'Bearer'}}, {'user': {'token': '\u65e5\u672c\u8a9e'}}):
+            with self.subTest(data=data):
+                auth = PavlokAuth('test-initial')
+                auth._runtime_token = 'previous-token'
+                auth._session = MagicMock()
+                auth._session.get.return_value.json.return_value = data
+                self.assertFalse(auth.refresh_runtime_token())
+                self.assertEqual(auth.get_runtime_token(), 'previous-token')
+
     def test_four_output_groups(self):
         groups = {f'SuperChat{i}': {'amounts': str(i * 500), 'output_mode': 'fixed',
                                    'fixed_output': str(i * 10)} for i in range(1, 5)}
