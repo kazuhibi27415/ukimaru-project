@@ -10,101 +10,101 @@
 
 [YouTube]
 ; YouTube Data API v3のAPIキー。Bearerは付けません。
-api_key=PASTE_YOUTUBE_API_KEY_HERE
+api_key =
 
 [Pavlok]
 ; Pavlok初期トークン。Bearer付き・無しの両方に対応します。
-initial_token=PASTE_PAVLOK_INITIAL_TOKEN_HERE
+initial_token =
 ; true=実機へZapを送信、false=送信せずログで確認（DRY-RUN）。
-enabled=false
+enabled = true
 ; スパチャ検出・予約から送信可能になるまでの最低秒数。5なら最低5秒。
 ; 0は待機なし。0以上の有限の数値を指定します。
-delay_seconds=5
+delay_seconds = 5
 ; 前回の送信試行から次の試行までの最低秒数。全グループ共通です。
 ; 待機中の予約も消えず、到着順に実行されます。0ならクールダウンなし。
-cooldown_seconds=10
+cooldown_seconds = 5
 
 [System]
 ; true: 起動時に取得した最初の履歴では作動しません（推奨）。
 ; false: 起動前のスパチャでも作動する場合があります。
-ignore_initial_history=true
+ignore_initial_history = true
 
 ; 【金額グループ】使わない場合はenabled=falseにします。
 [SuperChat1]
 ; true=このグループを使う、false=使わない。実送信には[Pavlok]もtrueが必要です。
-enabled=true
+enabled = true
 ; 対象金額（整数円）。200,500なら200円と500円だけ。200円以上ではありません。
 ; 通貨記号や桁区切りは不要。1000円は1000と記載します。
 ; 複数金額は半角カンマで区切り、有効な別グループと重複させないでください。
-amounts=200,500
+amounts = 200,500
 ; fixed=固定出力、random=範囲内の整数から送信直前に抽選。
 ; 1～4のどのグループでも両方使えます。この行で切り替えます。
-output_mode=fixed
+output_mode = random
 ; fixedで使う強さ（1～100）。20なら毎回20で送信します。
-fixed_output=20
+fixed_output = 30
 ; randomで使う強さの下限（1～100）。
-random_min=20
+random_min = 20
 ; randomで使う強さの上限（下限以上、100以下）。両端の値も含みます。
 ; 下限20・上限40なら20～40。同じ値ならランダムでも毎回その値です。
 ; 有効グループでは、未使用モードの数値も正しい範囲にしてください。
-random_max=20
+random_max = 40
 
 ; 【金額グループ】使わない場合はenabled=falseにします。
 [SuperChat2]
 ; true=このグループを使う、false=使わない。実送信には[Pavlok]もtrueが必要です。
-enabled=true
+enabled = true
 ; 対象金額（整数円）。200,500なら200円と500円だけ。200円以上ではありません。
 ; 通貨記号や桁区切りは不要。1000円は1000と記載します。
 ; 複数金額は半角カンマで区切り、有効な別グループと重複させないでください。
-amounts=1000
+amounts = 1000
 ; fixed=固定出力、random=範囲内の整数から送信直前に抽選。
 ; 1～4のどのグループでも両方使えます。この行で切り替えます。
-output_mode=fixed
+output_mode = random
 ; fixedで使う強さ（1～100）。20なら毎回20で送信します。
-fixed_output=20
+fixed_output = 30
 ; randomで使う強さの下限（1～100）。
-random_min=20
+random_min = 20
 ; randomで使う強さの上限（下限以上、100以下）。両端の値も含みます。
 ; 下限20・上限40なら20～40。同じ値ならランダムでも毎回その値です。
 ; 有効グループでは、未使用モードの数値も正しい範囲にしてください。
-random_max=20
+random_max = 40
 
 ; 【金額グループ】使わない場合はenabled=falseにします。
 [SuperChat3]
 ; true=このグループを使う、false=使わない。実送信には[Pavlok]もtrueが必要です。
-enabled=true
+enabled = true
 ; 対象金額（整数円）。200,500なら200円と500円だけ。200円以上ではありません。
 ; 通貨記号や桁区切りは不要。1000円は1000と記載します。
 ; 複数金額は半角カンマで区切り、有効な別グループと重複させないでください。
-amounts=3000
+amounts = 3000
 ; fixed=固定出力、random=範囲内の整数から送信直前に抽選。
 ; 1～4のどのグループでも両方使えます。この行で切り替えます。
-output_mode=fixed
+output_mode = random
 ; fixedで使う強さ（1～100）。20なら毎回20で送信します。
-fixed_output=20
+fixed_output = 30
 ; randomで使う強さの下限（1～100）。
-random_min=20
+random_min = 20
 ; randomで使う強さの上限（下限以上、100以下）。両端の値も含みます。
 ; 下限20・上限40なら20～40。同じ値ならランダムでも毎回その値です。
 ; 有効グループでは、未使用モードの数値も正しい範囲にしてください。
-random_max=20
+random_max = 40
 
 ; 【金額グループ】使わない場合はenabled=falseにします。
 [SuperChat4]
 ; true=このグループを使う、false=使わない。実送信には[Pavlok]もtrueが必要です。
-enabled=true
+enabled = true
 ; 対象金額（整数円）。200,500なら200円と500円だけ。200円以上ではありません。
 ; 通貨記号や桁区切りは不要。1000円は1000と記載します。
 ; 複数金額は半角カンマで区切り、有効な別グループと重複させないでください。
-amounts=5000
+amounts = 5000
 ; fixed=固定出力、random=範囲内の整数から送信直前に抽選。
 ; 1～4のどのグループでも両方使えます。この行で切り替えます。
-output_mode=fixed
+output_mode = random
 ; fixedで使う強さ（1～100）。20なら毎回20で送信します。
-fixed_output=20
+fixed_output = 30
 ; randomで使う強さの下限（1～100）。
-random_min=20
+random_min = 20
 ; randomで使う強さの上限（下限以上、100以下）。両端の値も含みます。
 ; 下限20・上限40なら20～40。同じ値ならランダムでも毎回その値です。
 ; 有効グループでは、未使用モードの数値も正しい範囲にしてください。
-random_max=20
+random_max = 40

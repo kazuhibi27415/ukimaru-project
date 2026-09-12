@@ -12,3 +12,4 @@ __pycache__/
 
 # Local credentials (keep config.ini.example tracked)
 
+CODEX_SPEC_PavlokSuperChat.md
