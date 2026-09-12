@@ -11,4 +11,4 @@ __pycache__/
 /debug-dist/
 
 # Local credentials (keep config.ini.example tracked)
-config.ini
+
