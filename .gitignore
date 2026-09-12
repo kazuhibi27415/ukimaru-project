@@ -1,0 +1,14 @@
+# Local Python environment and caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# PyInstaller output (keep PavlokSuperChat.spec tracked)
+/build/
+/dist/
+/debug-build/
+/debug-dist/
+
+# Local credentials (keep config.ini.example tracked)
+config.ini
