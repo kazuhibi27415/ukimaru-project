@@ -14,6 +14,40 @@ LOG_FORMAT = "[%(asctime)s] %(message)s"
 DATE_FORMAT = "%H:%M:%S"
 
 
+def configure_stdio() -> None:
+    """EXEでは環境変数が反映されない場合もあるため、GUI用パイプを明示設定する。"""
+    if sys.platform == "win32" and "--console" in sys.argv and sys.stdout is None:
+        import ctypes
+        import os
+        import msvcrt
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.GetStdHandle.argtypes = [ctypes.c_ulong]
+        kernel.GetStdHandle.restype = ctypes.c_void_p
+        if "--gui-worker" not in sys.argv:
+            # 明示的なCLI起動だけコンソールへ接続する。GUIと監視子プロセスは表示しない。
+            if not kernel.AttachConsole(ctypes.c_ulong(-1)):
+                kernel.AllocConsole()
+        for name, number, mode, flags in (("stdin", -10, "r", os.O_RDONLY),
+                                          ("stdout", -11, "w", os.O_WRONLY),
+                                          ("stderr", -12, "w", os.O_WRONLY)):
+            if getattr(sys, name) is None:
+                handle = kernel.GetStdHandle(ctypes.c_ulong(number))
+                if handle and handle != ctypes.c_void_p(-1).value:
+                    descriptor = msvcrt.open_osfhandle(handle, flags | os.O_BINARY)
+                    setattr(sys, name, open(descriptor, mode, encoding="utf-8", errors="replace", buffering=1))
+    if "--gui-worker" in sys.argv:
+        for stream in (sys.stdin, sys.stdout, sys.stderr):
+            if stream is not None and hasattr(stream, "reconfigure"):
+                stream.reconfigure(encoding="utf-8", errors="replace")
+        if sys.stdout is not None:
+            sys.stdout.reconfigure(line_buffering=True)
+    else:
+        # 通常コンソールは既存の文字コードを保ち、表示不能な文字で停止させない。
+        for stream in (sys.stdout, sys.stderr):
+            if stream is not None and hasattr(stream, "reconfigure"):
+                stream.reconfigure(errors="replace")
+
+
 def configure_logging() -> None:
     logging.basicConfig(
         level=logging.INFO,
@@ -120,8 +154,13 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    configure_stdio()
     try:
-        raise SystemExit(main())
+        if "--console" in sys.argv:
+            raise SystemExit(main())
+        else:
+            from settings_ui import run_gui
+            run_gui()
     except Exception as exc:
         configure_logging()
         logging.getLogger("main").error("[FATAL] %s", exc)

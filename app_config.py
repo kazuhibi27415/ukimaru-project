@@ -153,6 +153,11 @@ def load_settings(*, require_youtube_key: bool = True) -> Settings:
     if not read_files:
         raise RuntimeError("config.ini を読み込めませんでした。")
 
+    return settings_from_parser(parser, require_youtube_key=require_youtube_key)
+
+
+def settings_from_parser(parser: configparser.ConfigParser, *, require_youtube_key: bool = True) -> Settings:
+    """ファイル保存前のGUI設定も、コンソールと同じ規則で検証する。"""
     youtube_api_key = _normalize_ascii_compact(
         parser.get("YouTube", "api_key", fallback=""),
         "YouTube APIキー",
