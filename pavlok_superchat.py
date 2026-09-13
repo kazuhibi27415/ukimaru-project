@@ -107,7 +107,13 @@ def main() -> int:
     log.info("Video ID: %s", video_id)
 
     log.info("Live Chat ID取得中...")
-    live_chat_id = get_live_chat_id(video_id, settings.youtube_api_key)
+    auth_options = {}
+    if settings.youtube_auth_mode == "oauth":
+        from youtube_auth import YouTubeOAuth
+        youtube_auth = YouTubeOAuth(settings.youtube_oauth_client_file)
+        youtube_auth.login()
+        auth_options["oauth"] = youtube_auth
+    live_chat_id = get_live_chat_id(video_id, settings.youtube_api_key, **auth_options)
     log.info("Live Chat ID: %s", live_chat_id)
 
     worker = TriggerWorker(settings, pavlok_client)
@@ -144,6 +150,7 @@ def main() -> int:
             api_key=settings.youtube_api_key,
             ignore_initial_history=settings.ignore_initial_history,
             on_superchat=on_superchat,
+            **auth_options,
         )
     except KeyboardInterrupt:
         print()

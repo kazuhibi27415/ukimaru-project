@@ -82,16 +82,33 @@ def extract_video_id(value: str) -> str:
     raise ValueError("YouTube URLからVideo IDを取得できませんでした。")
 
 
-def get_live_chat_id(video_id: str, api_key: str) -> str:
-    response = requests.get(
-        f"{YOUTUBE_API_URL}/videos",
-        params={
-            "part": "liveStreamingDetails",
-            "id": video_id,
-            "key": api_key,
-        },
-        timeout=15,
-    )
+def get_live_chat_id(video_id: str, api_key: str, oauth=None) -> str:
+    if oauth is not None:
+        # 読み取りだけを401時に一度再試行。Pavlok送信の再試行とは独立。
+        for attempt in range(2):
+            try:
+                response = requests.get(
+                    f"{YOUTUBE_API_URL}/videos",
+                    params={"part": "liveStreamingDetails", "id": video_id},
+                    headers={"Authorization": "Bearer " + oauth.get_access_token(force_refresh=bool(attempt))},
+                    timeout=15,
+                )
+            except requests.RequestException:
+                raise RuntimeError("YouTube動画情報の取得に失敗しました。接続を確認してください。") from None
+            if response.status_code != 401:
+                break
+        if not response.ok:
+            raise RuntimeError(f"YouTube videos.list 失敗: HTTP {response.status_code}。配信者のアカウント・権限を確認してください。")
+    else:
+        response = requests.get(
+            f"{YOUTUBE_API_URL}/videos",
+            params={
+                "part": "liveStreamingDetails",
+                "id": video_id,
+                "key": api_key,
+            },
+            timeout=15,
+        )
 
     if not response.ok:
         body = response.text.strip().replace("\n", " ")[:500]
@@ -102,7 +119,7 @@ def get_live_chat_id(video_id: str, api_key: str) -> str:
     data = response.json()
     items = data.get("items", [])
     if not items:
-        raise RuntimeError("動画が見つかりません。Video ID/APIキーを確認してください。")
+        raise RuntimeError("動画が見つかりません。動画IDとAPIキー、またはGoogleログインの配信者アカウントを確認してください。")
 
     details = items[0].get("liveStreamingDetails", {})
     live_chat_id = details.get("activeLiveChatId")
@@ -143,6 +160,7 @@ def watch_live_chat(
     api_key: str,
     ignore_initial_history: bool,
     on_superchat,
+    oauth=None,
 ) -> None:
     """YouTube gRPC streamList を継続監視する。"""
     seen = SeenMessageCache()
@@ -150,6 +168,7 @@ def watch_live_chat(
     initial_batch = True
 
     metadata = (("x-goog-api-key", api_key),)
+    auth_retried = False
     credentials = grpc.ssl_channel_credentials()
 
     LOGGER.info("[STREAM] YouTube gRPCへ接続中...")
@@ -183,8 +202,11 @@ def watch_live_chat(
             received_response = False
 
             try:
+                if oauth is not None:
+                    metadata = (("authorization", "Bearer " + oauth.get_access_token()),)
                 for response in stub.StreamList(request, metadata=metadata):
                     received_response = True
+                    auth_retried = False
                     next_page_token = response.next_page_token or ""
 
                     if response.offline_at:
@@ -227,11 +249,20 @@ def watch_live_chat(
             except grpc.RpcError as exc:
                 code = exc.code()
                 details = exc.details()
-                LOGGER.error("[gRPC ERROR] %s: %s", code, details)
+                LOGGER.error("[gRPC ERROR] %s: %s", code, details if oauth is None else "Google認証での監視エラー")
+
+                if code == grpc.StatusCode.UNAUTHENTICATED:
+                    if oauth is not None and not auth_retried:
+                        auth_retried = True
+                        oauth.get_access_token(force_refresh=True)
+                        continue
+                    raise RuntimeError("YouTube認証に失敗しました。認証設定を確認し、Googleログインの場合は解除して再ログインしてください。") from None
 
                 if code in (grpc.StatusCode.INVALID_ARGUMENT, grpc.StatusCode.NOT_FOUND):
                     return
                 if code == grpc.StatusCode.PERMISSION_DENIED:
+                    if oauth is not None:
+                        raise RuntimeError("チャットへのアクセスが拒否されました。配信者アカウントを確認してください。YouTube API側の制限でメン限を取得できない場合もあります。") from None
                     raise RuntimeError(
                         "YouTube APIキーまたはAPI制限設定を確認してください。"
                     ) from exc

@@ -14,6 +14,13 @@ __pycache__/
 !/releases/
 !/releases/**
 
+# Local Windows helper scripts (also excluded from versioned releases)
+*.bat
+
 # Local credentials (keep config.ini.example tracked)
+config.ini
+client_secret*.json
+youtube_oauth.bin
+oauth-*.tmp
 
 CODEX_SPEC_PavlokSuperChat.md

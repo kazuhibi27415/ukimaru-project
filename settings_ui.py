@@ -11,7 +11,7 @@ import sys
 import tempfile
 import threading
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
 from app_config import ensure_config_exists, settings_from_parser
@@ -20,6 +20,8 @@ from youtube_stream import extract_video_id
 
 OUTPUT_LABELS = {"fixed": "固定", "random": "ランダム"}
 OUTPUT_VALUES = {label: value for value, label in OUTPUT_LABELS.items()}
+AUTH_LABELS = {"api_key": "APIキー（公開配信）", "oauth": "Googleログイン（メン限向け）"}
+AUTH_VALUES = {label: value for value, label in AUTH_LABELS.items()}
 
 
 def clipboard_action(widget, action):
@@ -210,6 +212,19 @@ class SettingsWindow:
         self.check(row, "起動時の履歴を無視", "System", "ignore_initial_history", "true")
         self.entry(general, 3, "検出後の待機秒数", "Pavlok", "delay_seconds", "5", width=12)
         self.entry(general, 4, "共通クールダウン秒数", "Pavlok", "cooldown_seconds", "10", width=12)
+        ttk.Label(general, text="YouTube認証方式").grid(row=5, column=0, sticky="w")
+        auth_bar = ttk.Frame(general)
+        auth_bar.grid(row=5, column=1, sticky="ew")
+        mode = ttk.Combobox(auth_bar, textvariable=self.var("YouTube", "auth_mode", "api_key"),
+                            values=tuple(AUTH_VALUES), state="readonly", width=32)
+        mode.pack(side="left")
+        logout = ttk.Button(auth_bar, text="Googleログインを解除", command=self.forget_google_login)
+        logout.pack(side="left", padx=8)
+        self.controls.extend((mode, logout))
+        self.entry(general, 6, "OAuthクライアントJSON", "YouTube", "oauth_client_file", "")
+        browse = ttk.Button(general, text="JSONを選択", command=self.choose_oauth_client)
+        browse.grid(row=6, column=2, padx=5)
+        self.controls.append(browse)
         groups = ttk.LabelFrame(frame, text="金額グループ — 使わないグループはOFF（最低1つON）", padding=8)
         groups.pack(fill="x")
         for column, label in enumerate(("使用", "対象金額（円・カンマ区切り）", "出力方法", "固定値", "ランダム下限", "ランダム上限")):
@@ -267,6 +282,8 @@ class SettingsWindow:
         value = self.parser.get(section, key, fallback=default)
         if key == "output_mode":
             value = OUTPUT_LABELS.get(value.strip().lower(), value)
+        if key == "auth_mode":
+            value = AUTH_LABELS.get(value.strip().lower(), value)
         if key in ("enabled", "ignore_initial_history"):
             value = "true" if self.parser.getboolean(section, key, fallback=default == "true") else "false"
         variable = tk.StringVar(value=value)
@@ -292,10 +309,26 @@ class SettingsWindow:
             value = variable.get().strip()
             if key == "output_mode":
                 value = OUTPUT_VALUES.get(value, value)
+            if key == "auth_mode":
+                value = AUTH_VALUES.get(value, value)
             if "\n" in value or "\r" in value:
                 raise ValueError("設定値に改行を含めないでください。")
             parser.set(section, key, value)
         return parser
+
+    def choose_oauth_client(self):
+        path = filedialog.askopenfilename(parent=self.root, title="デスクトップアプリ用OAuthクライアントJSON",
+                                          filetypes=[("JSON", "*.json")])
+        if path:
+            self.fields["YouTube", "oauth_client_file"].set(path)
+
+    def forget_google_login(self):
+        try:
+            from youtube_auth import forget_login
+            forget_login()
+            self.status.set("保存済みGoogleログインを削除しました。次回開始時にログインします。")
+        except Exception:
+            messagebox.showerror("ログイン解除失敗", "保存済みログインを削除できませんでした。", parent=self.root)
 
     def save(self):
         try:

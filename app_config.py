@@ -41,6 +41,8 @@ class Settings:
 
     ignore_initial_history: bool
     output_groups: tuple[OutputGroup, ...] = ()
+    youtube_auth_mode: str = "api_key"
+    youtube_oauth_client_file: str = ""
 
     def group_for_amount(self, amount: int) -> OutputGroup | None:
         return next((group for group in self.output_groups if amount in group.amounts), None)
@@ -178,11 +180,17 @@ def load_settings(*, require_youtube_key: bool = True) -> Settings:
 
 def settings_from_parser(parser: configparser.ConfigParser, *, require_youtube_key: bool = True) -> Settings:
     """ファイル保存前のGUI設定も、コンソールと同じ規則で検証する。"""
+    auth_mode = parser.get("YouTube", "auth_mode", fallback="api_key").strip().lower()
+    client_file = parser.get("YouTube", "oauth_client_file", fallback="").strip()
+    if auth_mode not in {"api_key", "oauth"}:
+        raise ValueError("YouTube認証方式は api_key または oauth を指定してください。")
+    if require_youtube_key and auth_mode == "oauth" and not Path(client_file).is_file():
+        raise ValueError("Googleログインにはデスクトップアプリ用OAuthクライアントJSONを選択してください。")
     youtube_api_key = _normalize_ascii_compact(
         parser.get("YouTube", "api_key", fallback=""),
         "YouTube APIキー",
     )
-    if require_youtube_key and _looks_like_placeholder(youtube_api_key):
+    if require_youtube_key and auth_mode == "api_key" and _looks_like_placeholder(youtube_api_key):
         raise ValueError(
             "[YouTube] api_key が未設定です。config.ini を編集してください。"
         )
@@ -264,6 +272,8 @@ def settings_from_parser(parser: configparser.ConfigParser, *, require_youtube_k
         random_max=random_max,
         ignore_initial_history=ignore_initial_history,
         output_groups=output_groups,
+        youtube_auth_mode=auth_mode,
+        youtube_oauth_client_file=client_file,
     )
 
 
