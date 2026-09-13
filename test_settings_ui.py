@@ -9,7 +9,8 @@ import os
 from unittest.mock import MagicMock, patch
 
 from app_config import settings_from_parser, ensure_config_exists
-from settings_ui import MonitorProcess, SettingsWindow, save_config
+from settings_ui import MonitorProcess, SettingsWindow, save_config, clipboard_action, add_clipboard_menu
+from tkinter import ttk
 from pavlok_superchat import configure_stdio
 from app_version import VERSION
 
@@ -17,10 +18,63 @@ from app_version import VERSION
 def example():
     parser = configparser.ConfigParser(interpolation=None)
     parser.read(Path(__file__).with_name('config.ini.example'), encoding='utf-8-sig')
+    # 利用者が設定例を編集しても、テストの入力条件を一定にする。
+    parser.set('Pavlok', 'enabled', 'false')
+    for i in range(1, 5):
+        parser.set(f'SuperChat{i}', 'output_mode', 'fixed')
     return parser
 
 
 class SettingsUiTests(unittest.TestCase):
+    def test_clipboard_inputs_and_readonly_log(self):
+        # OSのクリップボードは変更せず、ウィジェットの編集・イベント処理を検証する。
+        clipboard = {'value': ''}
+        for name, effect in (
+            ('clipboard_get', lambda **kwargs: clipboard['value']),
+            ('clipboard_clear', lambda **kwargs: clipboard.update(value='')),
+            ('clipboard_append', lambda value, **kwargs: clipboard.update(value=clipboard['value'] + value)),
+        ):
+            patcher = patch.object(tk.Misc, name, side_effect=effect)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            original = root.clipboard_get()
+        except tk.TclError:
+            original = None
+        try:
+            entry = ttk.Entry(root, show='*')
+            add_clipboard_menu(entry)
+            entry.insert(0, 'test-token')
+            clipboard_action(entry, 'select_all')
+            clipboard_action(entry, 'copy')
+            self.assertEqual(root.clipboard_get(), 'test-token')
+            root.clipboard_clear()
+            root.clipboard_append('日本語\n500')
+            entry.event_generate('<<Paste>>')
+            self.assertEqual(entry.get(), '日本語500')
+            clipboard_action(entry, 'select_all')
+            clipboard_action(entry, 'cut')
+            self.assertEqual(entry.get(), '')
+            self.assertEqual(root.clipboard_get(), '日本語500')
+            entry.configure(state='disabled')
+            clipboard_action(entry, 'paste')
+            self.assertEqual(entry.get(), '')
+            log = tk.Text(root)
+            log.insert('1.0', 'ログ ¥500')
+            log.configure(state='disabled')
+            clipboard_action(log, 'select_all')
+            clipboard_action(log, 'copy')
+            self.assertEqual(root.clipboard_get(), 'ログ ¥500')
+            clipboard_action(log, 'cut')
+            self.assertEqual(log.get('1.0', 'end-1c'), 'ログ ¥500')
+        finally:
+            root.clipboard_clear()
+            if original is not None:
+                root.clipboard_append(original)
+            root.destroy()
+
     def test_frozen_first_start_and_existing_settings(self):
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as directory:
             base = Path(directory)
@@ -116,7 +170,10 @@ class SettingsUiTests(unittest.TestCase):
         root = tk.Tk()
         root.withdraw()
         try:
-            with patch('settings_ui.ensure_config_exists', return_value=Path('config.ini.example')):
+            fixture = example()
+            with patch('settings_ui.ensure_config_exists', return_value=Path('config.ini.example')), \
+                    patch('settings_ui.configparser.ConfigParser', return_value=fixture), \
+                    patch.object(fixture, 'read', return_value=['mock.ini']):
                 window = SettingsWindow(root)
             self.assertIn(f'v{VERSION}', root.title())
             self.assertEqual(len([key for key in window.fields if key[1] == 'output_mode']), 4)

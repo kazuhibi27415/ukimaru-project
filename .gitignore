@@ -10,6 +10,10 @@ __pycache__/
 /debug-build/
 /debug-dist/
 
+# Versioned distribution files are tracked in Git.
+!/releases/
+!/releases/**
+
 # Local credentials (keep config.ini.example tracked)
 
 CODEX_SPEC_PavlokSuperChat.md

@@ -32,25 +32,25 @@ echo [1/4] Installing or updating PyInstaller...
 if errorlevel 1 goto BUILD_ERROR
 
 echo.
-echo [2/4] Removing previous build output...
-if exist "build" rmdir /s /q "build"
-if exist "dist" rmdir /s /q "dist"
+echo [2/4] Reading release version...
+set /p APP_VERSION=<VERSION.txt
+set "RELEASE_DIR=releases\v%APP_VERSION%"
 
 echo.
 echo [3/4] Building PavlokSuperChat.exe...
-".venv\Scripts\python.exe" -m PyInstaller --noconfirm --clean PavlokSuperChat.spec
+".venv\Scripts\python.exe" -m PyInstaller --noconfirm --clean --distpath "%RELEASE_DIR%" PavlokSuperChat.spec
 if errorlevel 1 goto BUILD_ERROR
 
-if not exist "dist\PavlokSuperChat.exe" (
-    echo [ERROR] dist\PavlokSuperChat.exe was not created.
+if not exist "%RELEASE_DIR%\PavlokSuperChat.exe" (
+    echo [ERROR] Release EXE was not created.
     goto BUILD_ERROR
 )
 
 echo.
 echo [4/4] Copying user files...
-copy /Y "README.txt" "dist\README.txt" >nul
+copy /Y "README.txt" "%RELEASE_DIR%\README.txt" >nul
 if errorlevel 1 goto BUILD_ERROR
-".venv\Scripts\python.exe" -c "import shutil; shutil.copyfile('\u66f4\u65b0\u5c65\u6b74.md', 'dist/\u66f4\u65b0\u5c65\u6b74.md')"
+".venv\Scripts\python.exe" -c "import shutil,sys; shutil.copyfile('\u66f4\u65b0\u5c65\u6b74.md', sys.argv[1]+'/\u66f4\u65b0\u5c65\u6b74.md')" "%RELEASE_DIR%"
 if errorlevel 1 goto BUILD_ERROR
 
 echo.
@@ -58,8 +58,8 @@ echo ====================================================
 echo  BUILD OK
 echo ====================================================
 echo Output:
-echo   %CD%\dist\PavlokSuperChat.exe
-echo   %CD%\dist\README.txt
+echo   %CD%\%RELEASE_DIR%\PavlokSuperChat.exe
+echo   %CD%\%RELEASE_DIR%\README.txt
 echo.
 echo The target PC does not need Python installed.
 echo.

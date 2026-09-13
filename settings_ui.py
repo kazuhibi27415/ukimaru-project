@@ -21,6 +21,66 @@ from youtube_stream import extract_video_id
 OUTPUT_LABELS = {"fixed": "固定", "random": "ランダム"}
 OUTPUT_VALUES = {label: value for value, label in OUTPUT_LABELS.items()}
 
+
+def clipboard_action(widget, action):
+    """入力欄と読み取り専用ログで同じ操作を提供する。"""
+    editable = str(widget.cget("state")) == "normal"
+    is_text = isinstance(widget, tk.Text)
+    try:
+        if action == "select_all":
+            if is_text:
+                widget.tag_add("sel", "1.0", "end-1c")
+            else:
+                widget.selection_range(0, "end")
+            return "break"
+        if action in ("copy", "cut"):
+            if action == "cut" and not editable:
+                return "break"
+            if is_text:
+                value = widget.get("sel.first", "sel.last")
+            else:
+                value = widget.get()[widget.index("sel.first"):widget.index("sel.last")]
+            widget.clipboard_clear()
+            widget.clipboard_append(value)
+            if action == "cut":
+                widget.delete("sel.first", "sel.last")
+        elif action == "paste" and editable:
+            value = widget.clipboard_get()
+            if not is_text:
+                value = value.replace("\r", "").replace("\n", "")
+            try:
+                widget.delete("sel.first", "sel.last")
+            except tk.TclError:
+                pass
+            widget.insert("insert", value)
+    except tk.TclError:
+        # 選択なし・クリップボードが空・画像のみの場合も画面を停止させない。
+        pass
+    return "break"
+
+
+def add_clipboard_menu(widget):
+    menu = tk.Menu(widget, tearoff=False)
+    for label, action in (("切り取り", "cut"), ("コピー", "copy"),
+                          ("貼り付け", "paste"), ("すべて選択", "select_all")):
+        menu.add_command(label=label, command=lambda action=action: clipboard_action(widget, action))
+
+    def popup(event):
+        widget.focus_set()
+        editable = str(widget.cget("state")) == "normal"
+        menu.entryconfigure(0, state="normal" if editable else "disabled")
+        menu.entryconfigure(2, state="normal" if editable else "disabled")
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+        return "break"
+
+    widget.bind("<Button-3>", popup)
+    for event, action in (("<<Copy>>", "copy"), ("<<Cut>>", "cut"), ("<<Paste>>", "paste"),
+                          ("<Control-a>", "select_all"), ("<Control-A>", "select_all")):
+        widget.bind(event, lambda event, action=action: clipboard_action(widget, action))
+
 def save_config(parser: configparser.ConfigParser, path: Path) -> None:
     """検証してから同じフォルダ内で置換し、書き込み途中の設定を残さない。"""
     settings_from_parser(parser, require_youtube_key=False)
@@ -197,6 +257,10 @@ class SettingsWindow:
         ttk.Label(frame, text="停止すると未送信予約を破棄します。送信済みのZapは取り消せません。", foreground="#8a4400").pack(anchor="w", pady=6)
         self.log = ScrolledText(frame, height=9, state="disabled", wrap="word")
         self.log.pack(fill="both", expand=True)
+        for control in self.controls:
+            if isinstance(control, ttk.Entry):
+                add_clipboard_menu(control)
+        add_clipboard_menu(self.log)
         root.after(100, self.poll)
 
     def var(self, section, key, default):
