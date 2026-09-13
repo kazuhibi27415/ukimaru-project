@@ -24,3 +24,29 @@ youtube_oauth.bin
 oauth-*.tmp
 
 CODEX_SPEC_PavlokSuperChat.md
+
+# Historical local maintenance note
+/BATCH_ENCODING_FIX.txt
+
+# Editor and OS files
+/.vscode/
+/.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+
+# Logs, temporary files, and local backups
+*.log
+*.tmp
+*.bak
+
+# Test and analysis caches/reports (keep test source files tracked)
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+/coverage.xml
