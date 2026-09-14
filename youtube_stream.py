@@ -155,6 +155,14 @@ def _to_event(message) -> SuperChatEvent:
     )
 
 
+def _is_super_chat_message(message) -> bool:
+    return (
+        message.HasField("snippet")
+        and message.snippet.type == SUPER_CHAT_EVENT
+        and message.snippet.HasField("super_chat_details")
+    )
+
+
 def watch_live_chat(
     live_chat_id: str,
     api_key: str,
@@ -217,9 +225,13 @@ def watch_live_chat(
                         for message in response.items:
                             if message.id:
                                 seen.add(message.id)
+                        super_chat_count = sum(
+                            _is_super_chat_message(message)
+                            for message in response.items
+                        )
                         LOGGER.info(
-                            "[INIT] %d 件を既読として処理しました。",
-                            len(response.items),
+                            "[INIT] Super Chat %d 件を既読として処理しました。",
+                            super_chat_count,
                         )
                         initial_batch = False
                         continue
@@ -232,12 +244,7 @@ def watch_live_chat(
                             continue
                         seen.add(message_id)
 
-                        if not message.HasField("snippet"):
-                            continue
-                        snippet = message.snippet
-                        if snippet.type != SUPER_CHAT_EVENT:
-                            continue
-                        if not snippet.HasField("super_chat_details"):
+                        if not _is_super_chat_message(message):
                             continue
 
                         on_superchat(_to_event(message))

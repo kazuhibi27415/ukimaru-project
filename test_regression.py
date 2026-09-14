@@ -279,17 +279,22 @@ class RegressionTests(unittest.TestCase):
 
         stub = MagicMock()
         stub.StreamList.side_effect = [
-            iter([batch([('old', 15)], 'resume')]),
+            iter([batch([('chat', 0), ('old', 15), ('sticker-old', 16)], 'resume')]),
             iter([batch([('old', 15), ('new', 15), ('new', 15), ('sticker', 16)], 'next'),
                   pb.LiveChatMessageListResponse(offline_at='ended')]),
         ]
         received = []
         with patch.object(youtube_stream.grpc, 'secure_channel'), \
                 patch.object(youtube_stream.grpc, 'channel_ready_future'), \
-                patch.object(youtube_stream.stream_list_pb2_grpc, 'V3DataLiveChatMessageServiceStub', return_value=stub):
+                patch.object(youtube_stream.stream_list_pb2_grpc, 'V3DataLiveChatMessageServiceStub', return_value=stub), \
+                self.assertLogs(youtube_stream.LOGGER, level='INFO') as logs:
             youtube_stream.watch_live_chat('chat', 'test-key', True, received.append)
         self.assertEqual([item.message_id for item in received], ['new'])
         self.assertEqual(stub.StreamList.call_args_list[1].args[0].page_token, 'resume')
+        self.assertTrue(any(
+            '[INIT] Super Chat 1 件を既読として処理しました。' in line
+            for line in logs.output
+        ))
 
 
 if __name__ == '__main__':
