@@ -2,8 +2,8 @@
 import re
 import requests
 
-RELEASES_URL = "https://github.com/kazuhibi27415/ukimaru-project/releases/latest"
-API_URL = "https://api.github.com/repos/kazuhibi27415/ukimaru-project/releases/latest"
+RELEASES_URL = "https://github.com/kazuhibi27415/PavlokSuperChat-Project/releases/latest"
+API_URL = "https://api.github.com/repos/kazuhibi27415/PavlokSuperChat-Project/releases/latest"
 
 
 def version_tuple(value):
