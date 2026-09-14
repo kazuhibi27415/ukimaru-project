@@ -176,6 +176,9 @@ class SettingsUiTests(unittest.TestCase):
                     patch.object(fixture, 'read', return_value=['mock.ini']):
                 window = SettingsWindow(root)
             self.assertIn(f'v{VERSION}', root.title())
+            window.release_results.put('v9.0')
+            window.poll()
+            self.assertIn('v9.0', window.update_label.cget('text'))
             self.assertEqual(len([key for key in window.fields if key[1] == 'output_mode']), 4)
             self.assertEqual(window.fields['SuperChat1', 'output_mode'].get(), '固定')
             self.assertEqual(window.fields['YouTube', 'auth_mode'].get(), 'APIキー（公開配信）')

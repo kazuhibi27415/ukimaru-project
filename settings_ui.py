@@ -11,12 +11,15 @@ import sys
 import tempfile
 import threading
 import tkinter as tk
+import webbrowser
 from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
 from app_config import ensure_config_exists, settings_from_parser
 from app_version import VERSION
 from youtube_stream import extract_video_id
+from release_check import newer_release, RELEASES_URL
+from session_logs import SessionLog, log_dir, redact
 
 OUTPUT_LABELS = {"fixed": "固定", "random": "ランダム"}
 OUTPUT_VALUES = {label: value for value, label in OUTPUT_LABELS.items()}
@@ -129,6 +132,7 @@ class MonitorProcess:
         self.process = None
         self.reader = None
         self.messages = queue.Queue(maxsize=2000)
+        self.secrets = []
 
     @property
     def running(self):
@@ -158,14 +162,22 @@ class MonitorProcess:
         self.reader.start()
 
     def _read(self, process):
+        saved_log = SessionLog(self.secrets)
+        warned = False
         try:
             for line in process.stdout:
+                line = redact(line, self.secrets)
+                saved_log.write(line)
                 try:
+                    if saved_log.failed and not warned:
+                        self.messages.put_nowait('[LOG] ログを保存できません。画面表示と監視は続行します。\n')
+                        warned = True
                     self.messages.put_nowait(line)
                 except queue.Full:
                     # 画面ログが詰まっても監視プロセスを止めない。
                     pass
         finally:
+            saved_log.close()
             process.stdout.close()
 
     def stop(self):
@@ -188,6 +200,7 @@ class SettingsWindow:
         self.secrets = []
         self.fields = {}
         self.controls = []
+        self.release_results = queue.Queue()
         self.path = ensure_config_exists()
         self.parser = configparser.ConfigParser(interpolation=None)
         if self.path.exists():
@@ -199,6 +212,9 @@ class SettingsWindow:
         frame = ttk.Frame(root, padding=14)
         frame.pack(fill="both", expand=True)
         ttk.Label(frame, text=f"PavlokSuperChat v{VERSION}", font=("Yu Gothic UI", 18, "bold")).pack(anchor="w")
+        self.update_label = ttk.Label(frame, text="", foreground="#3569a8", font=("Yu Gothic UI", 9), cursor="hand2")
+        self.update_label.pack(anchor="w")
+        self.update_label.bind('<Button-1>', lambda event: webbrowser.open(RELEASES_URL) if self.update_label.cget('text') else None)
         ttk.Label(frame, text="日本円のSuper Chatを金額完全一致で検出します。設定は開始前に保存されます。").pack(anchor="w")
         ttk.Label(frame, text=f"設定の保存先: {self.path}", foreground="#666666").pack(anchor="w")
         general = ttk.LabelFrame(frame, text="認証と共通設定", padding=10)
@@ -267,6 +283,7 @@ class SettingsWindow:
         self.start_button.pack(side="left", padx=8)
         self.stop_button = ttk.Button(buttons, text="監視停止", command=self.stop, state="disabled")
         self.stop_button.pack(side="left")
+        ttk.Button(buttons, text="ログフォルダ", command=self.open_logs).pack(side="right")
         self.status = tk.StringVar(value="停止中")
         ttk.Label(buttons, textvariable=self.status).pack(side="left", padx=15)
         ttk.Label(frame, text="停止すると未送信予約を破棄します。送信済みのZapは取り消せません。", foreground="#8a4400").pack(anchor="w", pady=6)
@@ -347,6 +364,7 @@ class SettingsWindow:
             save_config(parser, self.path)
             self.secrets = [value for value in (settings.youtube_api_key, settings.pavlok_initial_token,
                            parser.get("Pavlok", "initial_token")) if value]
+            self.monitor.secrets = self.secrets[:]
             self.monitor.start(video_id)
         except Exception as exc:
             messagebox.showerror("監視を開始できません", str(exc), parent=self.root)
@@ -370,6 +388,12 @@ class SettingsWindow:
         self.stop_button.configure(state="disabled")
 
     def poll(self):
+        try:
+            tag = self.release_results.get_nowait()
+            if tag:
+                self.update_label.configure(text=f"新しいバージョン {tag} があります ↗")
+        except queue.Empty:
+            pass
         for _ in range(200):
             try:
                 line = self.monitor.messages.get_nowait()
@@ -401,11 +425,25 @@ class SettingsWindow:
         self.closing = True
         self.stop()
 
+    def check_release(self):
+        def check():
+            self.release_results.put(newer_release(VERSION))
+        threading.Thread(target=check, daemon=True).start()
+
+    def open_logs(self):
+        try:
+            path = log_dir()
+            path.mkdir(parents=True, exist_ok=True)
+            os.startfile(path)
+        except OSError:
+            messagebox.showerror("ログフォルダ", "ログフォルダを開けませんでした。", parent=self.root)
+
 
 def run_gui():
     root = tk.Tk()
     try:
-        SettingsWindow(root)
+        window = SettingsWindow(root)
+        window.check_release()
     except Exception as exc:
         messagebox.showerror("設定画面を開けません", str(exc), parent=root)
         root.destroy()
