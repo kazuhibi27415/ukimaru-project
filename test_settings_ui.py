@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 from app_config import settings_from_parser, ensure_config_exists
 from settings_ui import MonitorProcess, SettingsWindow, save_config, clipboard_action, add_clipboard_menu
 from tkinter import ttk
-from pavlok_superchat import configure_stdio
+from pavlok_superchat import configure_stdio, report_fatal
 from app_version import VERSION
 
 
@@ -121,7 +121,8 @@ class SettingsUiTests(unittest.TestCase):
             parser.set('SuperChat4', 'enabled', 'false')
             parser.set('SuperChat1', 'output_mode', 'random')
             parser.set('SuperChat1', 'random_max', '30')
-            save_config(parser, path)
+            with patch('settings_ui.save_token'):
+                save_config(parser, path)
             after = configparser.ConfigParser(interpolation=None)
             after.read(path, encoding='utf-8-sig')
             config = settings_from_parser(after, require_youtube_key=False)
@@ -132,7 +133,8 @@ class SettingsUiTests(unittest.TestCase):
             saved = path.read_bytes()
             parser.set('SuperChat1', 'random_max', '101')
             with self.assertRaises(ValueError):
-                save_config(parser, path)
+                with patch('settings_ui.save_token'):
+                    save_config(parser, path)
             self.assertEqual(path.read_bytes(), saved)
         finally:
             path.unlink(missing_ok=True)
@@ -172,6 +174,7 @@ class SettingsUiTests(unittest.TestCase):
         try:
             fixture = example()
             with patch('settings_ui.ensure_config_exists', return_value=Path('config.ini.example')), \
+                    patch('settings_ui.hydrate_pavlok_token'), \
                     patch('settings_ui.configparser.ConfigParser', return_value=fixture), \
                     patch.object(fixture, 'read', return_value=['mock.ini']):
                 window = SettingsWindow(root)
@@ -206,6 +209,16 @@ class SettingsUiTests(unittest.TestCase):
             self.assertEqual(str(window.stop_button['state']), 'disabled')
         finally:
             root.destroy()
+
+    def test_gui_worker_fatal_does_not_wait_for_closed_stdin(self):
+        with patch.object(sys, 'argv', ['PavlokSuperChat.exe', '--console', '--gui-worker']), \
+                patch('builtins.input') as wait, patch('builtins.print'):
+            self.assertEqual(report_fatal(RuntimeError('original failure')), 1)
+            wait.assert_not_called()
+        with patch.object(sys, 'argv', ['PavlokSuperChat.exe', '--console']), \
+                patch('builtins.input', side_effect=EOFError) as wait, patch('builtins.print'):
+            self.assertEqual(report_fatal(RuntimeError('original failure')), 1)
+            wait.assert_called_once()
 
 
 if __name__ == '__main__':

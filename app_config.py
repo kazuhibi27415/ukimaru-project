@@ -5,6 +5,7 @@ import math
 import os
 import sys
 import re
+import tempfile
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
@@ -175,7 +176,59 @@ def load_settings(*, require_youtube_key: bool = True) -> Settings:
     if not read_files:
         raise RuntimeError("config.ini を読み込めませんでした。")
 
+    hydrate_pavlok_token(parser, config_path, migrate=True)
+
     return settings_from_parser(parser, require_youtube_key=require_youtube_key)
+
+
+def _clear_plaintext_pavlok_token(path: Path) -> None:
+    """コメントと他の設定を保ち、INI内の初期トークンだけを空欄にする。"""
+    original = path.read_text(encoding="utf-8-sig")
+    lines = []
+    section = None
+    changed = False
+    for line in original.splitlines():
+        match = re.match(r"\s*\[([^]]+)]", line)
+        if match:
+            section = match.group(1).strip().lower()
+        elif section == "pavlok" and not line.lstrip().startswith((";", "#")) and "=" in line:
+            key = line.split("=", 1)[0].strip().lower()
+            if key == "initial_token":
+                line = "initial_token="
+                changed = True
+        lines.append(line)
+    if not changed:
+        return
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8-sig", newline="\r\n",
+                                         dir=path.parent, delete=False) as handle:
+            temporary = Path(handle.name)
+            handle.write("\n".join(lines).rstrip() + "\n")
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def hydrate_pavlok_token(parser: configparser.ConfigParser, path: Path | None = None, *, migrate: bool = False) -> str:
+    """暗号化トークンをメモリ上の設定へ戻し、旧INIの平文値は安全に移行する。"""
+    from pavlok_secret import load_token, save_token
+
+    raw = parser.get("Pavlok", "initial_token", fallback="")
+    token = _normalize_bearer_token(raw)
+    if token and not _looks_like_placeholder(token):
+        if migrate and path is not None:
+            save_token(token)
+            _clear_plaintext_pavlok_token(Path(path))
+        parser.set("Pavlok", "initial_token", token)
+        return token
+    stored = load_token()
+    if stored:
+        token = _normalize_bearer_token(stored)
+        parser.set("Pavlok", "initial_token", token)
+        return token
+    return raw
 
 
 def settings_from_parser(parser: configparser.ConfigParser, *, require_youtube_key: bool = True) -> Settings:

@@ -15,7 +15,8 @@ import webbrowser
 from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
-from app_config import ensure_config_exists, settings_from_parser
+from app_config import ensure_config_exists, hydrate_pavlok_token, settings_from_parser
+from pavlok_secret import save_token
 from app_version import VERSION
 from youtube_stream import extract_video_id
 from release_check import newer_release, RELEASES_URL
@@ -88,10 +89,17 @@ def add_clipboard_menu(widget):
 
 def save_config(parser: configparser.ConfigParser, path: Path) -> None:
     """検証してから同じフォルダ内で置換し、書き込み途中の設定を残さない。"""
-    settings_from_parser(parser, require_youtube_key=False)
+    settings = settings_from_parser(parser, require_youtube_key=False)
+    save_token(settings.pavlok_initial_token)
+    # トークンは暗号化ファイルにのみ保存し、INIへは空欄を書き込む。
+    parser_for_file = configparser.ConfigParser(interpolation=None)
+    parser_for_file.read_dict({section: dict(parser[section]) for section in parser.sections()})
+    if not parser_for_file.has_section("Pavlok"):
+        parser_for_file.add_section("Pavlok")
+    parser_for_file.set("Pavlok", "initial_token", "")
     # 元の説明コメントを保持し、画面の設定値だけ更新する。
     original = path.read_text(encoding="utf-8-sig") if path.exists() else ""
-    remaining = {section: dict(parser[section]) for section in parser.sections()}
+    remaining = {section: dict(parser_for_file[section]) for section in parser_for_file.sections()}
     lines = []
     section = None
     for line in original.splitlines():
@@ -112,6 +120,7 @@ def save_config(parser: configparser.ConfigParser, path: Path) -> None:
     text = "\n".join(lines).rstrip() + "\n"
     check = configparser.ConfigParser(interpolation=None)
     check.read_string(text)
+    check.set("Pavlok", "initial_token", settings.pavlok_initial_token)
     settings_from_parser(check, require_youtube_key=False)
     temporary = None
     try:
@@ -205,6 +214,7 @@ class SettingsWindow:
         self.parser = configparser.ConfigParser(interpolation=None)
         if self.path.exists():
             self.parser.read(self.path, encoding="utf-8-sig")
+        hydrate_pavlok_token(self.parser, self.path, migrate=True)
         root.title(f"PavlokSuperChat v{VERSION} — 設定と監視")
         root.geometry("1000x780")
         root.minsize(900, 700)

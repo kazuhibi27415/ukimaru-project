@@ -1,8 +1,6 @@
 """YouTube専用OAuth。認証情報はWindowsのユーザー単位で暗号化して保存する。"""
 from __future__ import annotations
 
-import ctypes
-from ctypes import wintypes
 import json
 import logging
 import os
@@ -12,6 +10,7 @@ import tempfile
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
+from windows_dpapi import protect
 
 SCOPES = ["https://www.googleapis.com/auth/youtube.readonly"]
 TOKEN_URI = "https://oauth2.googleapis.com/token"
@@ -25,30 +24,6 @@ def token_path() -> Path:
 
 def forget_login() -> None:
     token_path().unlink(missing_ok=True)
-
-
-def protect(data: bytes, *, decrypt: bool = False) -> bytes:
-    """DPAPIのUIを禁止し、平文保存へフォールバックしない。"""
-    class Blob(ctypes.Structure):
-        _fields_ = [("size", wintypes.DWORD), ("data", ctypes.POINTER(ctypes.c_char))]
-
-    buffer = ctypes.create_string_buffer(data)
-    source = Blob(len(data), ctypes.cast(buffer, ctypes.POINTER(ctypes.c_char)))
-    result = Blob()
-    crypt = ctypes.WinDLL("crypt32", use_last_error=True)
-    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
-    kernel.LocalFree.argtypes = [ctypes.c_void_p]
-    kernel.LocalFree.restype = ctypes.c_void_p
-    function = crypt.CryptUnprotectData if decrypt else crypt.CryptProtectData
-    function.argtypes = [ctypes.POINTER(Blob), ctypes.c_void_p, ctypes.c_void_p,
-                         ctypes.c_void_p, ctypes.c_void_p, wintypes.DWORD, ctypes.POINTER(Blob)]
-    function.restype = wintypes.BOOL
-    if not function(ctypes.byref(source), None, None, None, None, 1, ctypes.byref(result)):
-        raise OSError("Googleログイン情報の暗号化・復号に失敗しました。")
-    try:
-        return ctypes.string_at(result.data, result.size)
-    finally:
-        kernel.LocalFree(ctypes.cast(result.data, ctypes.c_void_p))
 
 
 class YouTubeOAuth:

@@ -30,6 +30,7 @@ def settings(*, groups=None, **values):
     if groups is not None:
         parser.read_dict(groups)
     with patch.object(app_config, 'get_config_path', return_value=MagicMock()), \
+            patch.object(app_config, 'hydrate_pavlok_token', return_value=''), \
             patch.object(app_config.configparser, 'ConfigParser', return_value=parser), \
             patch.object(parser, 'read', return_value=['mock.ini']):
         return app_config.load_settings()

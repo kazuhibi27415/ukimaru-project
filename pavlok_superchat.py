@@ -57,6 +57,19 @@ def configure_logging() -> None:
     )
 
 
+def report_fatal(exc: Exception) -> int:
+    """GUI子プロセスでは閉じた標準入力を待たず、元のエラーだけを返す。"""
+    configure_logging()
+    logging.getLogger("main").error("[FATAL] %s", exc)
+    print()
+    if "--gui-worker" not in sys.argv:
+        try:
+            input("Enterキーで終了...")
+        except EOFError:
+            pass
+    return 1
+
+
 def main() -> int:
     configure_logging()
     log = logging.getLogger("main")
@@ -170,8 +183,4 @@ if __name__ == "__main__":
             from settings_ui import run_gui
             run_gui()
     except Exception as exc:
-        configure_logging()
-        logging.getLogger("main").error("[FATAL] %s", exc)
-        print()
-        input("Enterキーで終了...")
-        raise SystemExit(1)
+        raise SystemExit(report_fatal(exc))
