@@ -17,9 +17,96 @@ TOKEN_URI = "https://oauth2.googleapis.com/token"
 LOGGER = logging.getLogger(__name__)
 
 
-def token_path() -> Path:
+def app_data_dir() -> Path:
     local = Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local"))
-    return local / "PavlokSuperChat" / "youtube_oauth.bin"
+    return local / "PavlokSuperChat"
+
+
+def token_path() -> Path:
+    return app_data_dir() / "youtube_oauth.bin"
+
+
+def managed_client_path() -> Path:
+    return app_data_dir() / "youtube_oauth_client.json"
+
+
+def _client_config(data) -> dict:
+    try:
+        installed = data["installed"]
+        client_id = installed["client_id"]
+        client_secret = installed["client_secret"]
+        if not isinstance(client_id, str) or not client_id or not isinstance(client_secret, str) or not client_secret:
+            raise ValueError()
+    except (KeyError, TypeError, ValueError):
+        raise ValueError("デスクトップアプリ用のOAuthクライアントJSONを選択してください。") from None
+    # 利用者が選択したJSONから任意の接続先や余分なデータを引き継がない。
+    return {"installed": {
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": TOKEN_URI,
+        "redirect_uris": ["http://localhost"],
+    }}
+
+
+def _write_managed_client(client: dict) -> str:
+    path = managed_client_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="\n",
+                                         dir=path.parent, prefix="youtube-client-", suffix=".tmp",
+                                         delete=False) as handle:
+            temporary = Path(handle.name)
+            json.dump(client, handle, ensure_ascii=True, separators=(",", ":"))
+            handle.write("\n")
+        os.replace(temporary, path)
+    except OSError:
+        raise RuntimeError("OAuthクライアントJSONをアプリ管理フォルダへ保存できませんでした。") from None
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    return str(path)
+
+
+def install_client_file(source: str | Path) -> str:
+    try:
+        data = json.loads(Path(source).read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError, TypeError):
+        raise ValueError("デスクトップアプリ用のOAuthクライアントJSONを選択してください。") from None
+    return _write_managed_client(_client_config(data))
+
+
+def recover_client_from_login() -> str | None:
+    """元JSONが消えていても、暗号化済みログインに必要なクライアント情報があれば復元する。"""
+    try:
+        if not token_path().exists():
+            return None
+        credentials = json.loads(protect(token_path().read_bytes(), decrypt=True))
+        client = _client_config({"installed": credentials})
+        return _write_managed_client(client)
+    except (OSError, ValueError, RuntimeError, TypeError):
+        return None
+
+
+def ensure_managed_client(configured: str) -> str:
+    source = Path(configured) if configured else None
+    managed = managed_client_path()
+    if source is not None and source.is_file():
+        try:
+            if source.resolve() == managed.resolve():
+                _client_config(json.loads(source.read_text(encoding="utf-8-sig")))
+                return str(managed)
+        except (OSError, ValueError, TypeError):
+            pass
+        return install_client_file(source)
+    if managed.is_file():
+        try:
+            _client_config(json.loads(managed.read_text(encoding="utf-8-sig")))
+            return str(managed)
+        except (OSError, ValueError, TypeError):
+            pass
+    return recover_client_from_login() or configured
 
 
 def forget_login() -> None:
@@ -30,16 +117,7 @@ class YouTubeOAuth:
     def __init__(self, client_file: str):
         self.credentials = None
         try:
-            data = json.loads(Path(client_file).read_text(encoding="utf-8-sig"))["installed"]
-            if not data.get("client_id") or not data.get("client_secret"):
-                raise ValueError()
-            # 選択ファイル内の任意URLに認証情報を送信しない。
-            self.client = {"installed": {
-                "client_id": data["client_id"], "client_secret": data["client_secret"],
-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": TOKEN_URI,
-                "redirect_uris": ["http://localhost"],
-            }}
+            self.client = _client_config(json.loads(Path(client_file).read_text(encoding="utf-8-sig")))
         except (OSError, ValueError, KeyError, TypeError, AttributeError):
             raise ValueError("デスクトップアプリ用のOAuthクライアントJSONを選択してください。") from None
 

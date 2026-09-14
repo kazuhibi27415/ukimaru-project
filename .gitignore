@@ -21,6 +21,7 @@ __pycache__/
 config.ini
 client_secret*.json
 youtube_oauth.bin
+youtube_oauth_client.json
 pavlok_initial_token.bin
 oauth-*.tmp
 

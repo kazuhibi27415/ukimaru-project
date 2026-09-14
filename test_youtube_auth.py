@@ -11,7 +11,7 @@ import grpc
 import stream_list_pb2 as pb
 import youtube_auth as auth
 import youtube_stream as stream
-from app_config import settings_from_parser
+from app_config import hydrate_youtube_client, settings_from_parser
 
 
 class OAuthTests(unittest.TestCase):
@@ -24,9 +24,12 @@ class OAuthTests(unittest.TestCase):
             'auth_uri': 'https://untrusted.invalid', 'token_uri': 'https://untrusted.invalid',
         }}))
         self.cache = Path(self.directory.name) / 'youtube_oauth.bin'
-        self.patcher = patch.object(auth, 'token_path', return_value=self.cache)
-        self.patcher.start()
-        self.addCleanup(self.patcher.stop)
+        self.managed = Path(self.directory.name) / 'profile' / 'youtube_oauth_client.json'
+        self.patchers = [patch.object(auth, 'token_path', return_value=self.cache),
+                         patch.object(auth, 'managed_client_path', return_value=self.managed)]
+        for patcher in self.patchers:
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def test_windows_encryption_and_cache_roundtrip(self):
         plaintext = b'dummy-access-and-refresh-token'
@@ -65,6 +68,47 @@ class OAuthTests(unittest.TestCase):
             self.assertTrue(factory.call_args.kwargs['autogenerate_code_verifier'])
             self.assertEqual(factory.call_args.args[0]['installed']['token_uri'], auth.TOKEN_URI)
             save.assert_called_once()
+
+    def test_selected_client_is_copied_to_managed_location(self):
+        data = json.loads(self.client_file.read_text())
+        data['installed']['access_token'] = 'must-not-be-copied'
+        self.client_file.write_text(json.dumps(data))
+        installed = auth.install_client_file(self.client_file)
+        self.assertEqual(installed, str(self.managed))
+        saved = self.managed.read_text()
+        self.assertNotIn('must-not-be-copied', saved)
+        self.assertIn('test.apps.googleusercontent.com', saved)
+        self.client_file.unlink()
+        self.assertEqual(auth.ensure_managed_client(str(self.client_file)), str(self.managed))
+
+    def test_old_config_path_is_migrated_and_persisted(self):
+        config_path = Path(self.directory.name) / 'config.ini'
+        parser = configparser.ConfigParser(interpolation=None)
+        parser.read('config.ini.example', encoding='utf-8-sig')
+        parser.set('YouTube', 'auth_mode', 'oauth')
+        parser.set('YouTube', 'oauth_client_file', str(self.client_file))
+        with config_path.open('w', encoding='utf-8-sig') as handle:
+            parser.write(handle)
+        hydrate_youtube_client(parser, config_path, migrate=True)
+        self.assertEqual(parser.get('YouTube', 'oauth_client_file'), str(self.managed))
+        disk = configparser.ConfigParser(interpolation=None)
+        disk.read(config_path, encoding='utf-8-sig')
+        self.assertEqual(disk.get('YouTube', 'oauth_client_file'), str(self.managed))
+
+    def test_deleted_old_json_is_recovered_from_encrypted_login(self):
+        oauth = auth.YouTubeOAuth(str(self.client_file))
+        oauth.credentials = auth.Credentials(
+            token='dummy-access', refresh_token='dummy-refresh', token_uri=auth.TOKEN_URI,
+            client_id='test.apps.googleusercontent.com', client_secret='dummy-secret', scopes=auth.SCOPES)
+        oauth._save()
+        self.client_file.unlink()
+        self.assertFalse(self.managed.exists())
+        recovered = auth.ensure_managed_client(str(self.client_file))
+        self.assertEqual(recovered, str(self.managed))
+        saved = self.managed.read_text()
+        self.assertIn('test.apps.googleusercontent.com', saved)
+        self.assertNotIn('dummy-access', saved)
+        self.assertNotIn('dummy-refresh', saved)
 
     def test_login_failure_does_not_expose_tokens_or_save(self):
         oauth = auth.YouTubeOAuth(str(self.client_file))

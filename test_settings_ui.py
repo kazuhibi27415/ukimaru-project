@@ -175,6 +175,7 @@ class SettingsUiTests(unittest.TestCase):
             fixture = example()
             with patch('settings_ui.ensure_config_exists', return_value=Path('config.ini.example')), \
                     patch('settings_ui.hydrate_pavlok_token'), \
+                    patch('settings_ui.hydrate_youtube_client'), \
                     patch('settings_ui.configparser.ConfigParser', return_value=fixture), \
                     patch.object(fixture, 'read', return_value=['mock.ini']):
                 window = SettingsWindow(root)

@@ -177,6 +177,7 @@ def load_settings(*, require_youtube_key: bool = True) -> Settings:
         raise RuntimeError("config.ini を読み込めませんでした。")
 
     hydrate_pavlok_token(parser, config_path, migrate=True)
+    hydrate_youtube_client(parser, config_path, migrate=True)
 
     return settings_from_parser(parser, require_youtube_key=require_youtube_key)
 
@@ -229,6 +230,49 @@ def hydrate_pavlok_token(parser: configparser.ConfigParser, path: Path | None = 
         parser.set("Pavlok", "initial_token", token)
         return token
     return raw
+
+
+def _set_config_value(path: Path, target_section: str, target_key: str, value: str) -> None:
+    original = path.read_text(encoding="utf-8-sig")
+    lines = []
+    section = None
+    changed = False
+    for line in original.splitlines():
+        match = re.match(r"\s*\[([^]]+)]", line)
+        if match:
+            section = match.group(1).strip().lower()
+        elif section == target_section.lower() and not line.lstrip().startswith((";", "#")) and "=" in line:
+            if line.split("=", 1)[0].strip().lower() == target_key.lower():
+                line = f"{target_key}={value}"
+                changed = True
+        lines.append(line)
+    if not changed:
+        return
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8-sig", newline="\r\n",
+                                         dir=path.parent, delete=False) as handle:
+            temporary = Path(handle.name)
+            handle.write("\n".join(lines).rstrip() + "\n")
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def hydrate_youtube_client(parser: configparser.ConfigParser, path: Path | None = None, *, migrate: bool = False) -> str:
+    """OAuth JSONを更新で消えない管理場所へ移し、メモリとINIのパスを更新する。"""
+    from youtube_auth import ensure_managed_client
+
+    configured = parser.get("YouTube", "oauth_client_file", fallback="").strip()
+    if not configured and parser.get("YouTube", "auth_mode", fallback="api_key").strip().lower() != "oauth":
+        return ""
+    managed = ensure_managed_client(configured)
+    if managed and managed != configured:
+        parser.set("YouTube", "oauth_client_file", managed)
+        if migrate and path is not None:
+            _set_config_value(Path(path), "YouTube", "oauth_client_file", managed)
+    return managed
 
 
 def settings_from_parser(parser: configparser.ConfigParser, *, require_youtube_key: bool = True) -> Settings:

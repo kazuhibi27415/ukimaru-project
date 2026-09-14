@@ -11,7 +11,7 @@
 [YouTube]
 ; api_key=従来のAPIキー方式、oauth=配信者のGoogleログイン（メン限向け）。
 auth_mode=api_key
-; oauth時のみ必要。Google Cloudのデスクトップアプリ用JSONのフルパス。
+; oauth時のみ必要。選択後はアプリ管理フォルダのコピー先へ自動更新されます。
 oauth_client_file=
 ; YouTube Data API v3のAPIキー。Bearerは付けません。
 api_key =

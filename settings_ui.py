@@ -15,12 +15,13 @@ import webbrowser
 from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
-from app_config import ensure_config_exists, hydrate_pavlok_token, settings_from_parser
+from app_config import ensure_config_exists, hydrate_pavlok_token, hydrate_youtube_client, settings_from_parser
 from pavlok_secret import save_token
 from app_version import VERSION
 from youtube_stream import extract_video_id
 from release_check import newer_release, RELEASES_URL
 from session_logs import SessionLog, log_dir, redact
+from youtube_auth import ensure_managed_client, install_client_file
 
 OUTPUT_LABELS = {"fixed": "固定", "random": "ランダム"}
 OUTPUT_VALUES = {label: value for value, label in OUTPUT_LABELS.items()}
@@ -89,6 +90,9 @@ def add_clipboard_menu(widget):
 
 def save_config(parser: configparser.ConfigParser, path: Path) -> None:
     """検証してから同じフォルダ内で置換し、書き込み途中の設定を残さない。"""
+    configured_client = parser.get("YouTube", "oauth_client_file", fallback="").strip()
+    if configured_client:
+        parser.set("YouTube", "oauth_client_file", ensure_managed_client(configured_client))
     settings = settings_from_parser(parser, require_youtube_key=False)
     save_token(settings.pavlok_initial_token)
     # トークンは暗号化ファイルにのみ保存し、INIへは空欄を書き込む。
@@ -215,6 +219,7 @@ class SettingsWindow:
         if self.path.exists():
             self.parser.read(self.path, encoding="utf-8-sig")
         hydrate_pavlok_token(self.parser, self.path, migrate=True)
+        hydrate_youtube_client(self.parser, self.path, migrate=True)
         root.title(f"PavlokSuperChat v{VERSION} — 設定と監視")
         root.geometry("1000x780")
         root.minsize(900, 700)
@@ -347,7 +352,12 @@ class SettingsWindow:
         path = filedialog.askopenfilename(parent=self.root, title="デスクトップアプリ用OAuthクライアントJSON",
                                           filetypes=[("JSON", "*.json")])
         if path:
-            self.fields["YouTube", "oauth_client_file"].set(path)
+            try:
+                managed = install_client_file(path)
+                self.fields["YouTube", "oauth_client_file"].set(managed)
+                self.status.set("OAuthクライアントJSONをアプリ管理フォルダへコピーしました。")
+            except Exception as exc:
+                messagebox.showerror("OAuth JSONを保存できません", str(exc), parent=self.root)
 
     def forget_google_login(self):
         try:
